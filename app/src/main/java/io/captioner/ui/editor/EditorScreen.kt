@@ -34,6 +34,11 @@ fun EditorScreen(
 
     LaunchedEffect(viewModel) {
         viewModel.getOrInitializeThumbnails(context)
+        viewModel.initializeExoPlayer(context)
+    }
+
+    LaunchedEffect(project?.videoUri) {
+        viewModel.initializeVideoForExoPlayer()
     }
 
     Scaffold(
@@ -61,7 +66,8 @@ fun EditorScreen(
             }
         }
     ) { innerPadding ->
-        if (state.projectLoading) {
+        val exoplayer = viewModel.exoPlayer
+        if (state.projectLoading || exoplayer == null) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
@@ -80,8 +86,7 @@ fun EditorScreen(
             }
             Editor(
                 modifier = Modifier.padding(innerPadding),
-                videoUri = project.videoUri,
-                setDuration = viewModel::setDuration,
+                exoPlayer = exoplayer,
                 isPlaying = state.isPlaying,
                 captions = state.captions,
                 thumbnailUris = state.thumbnailUris,
@@ -286,6 +291,9 @@ fun EditorScreen(
     }
 
     LaunchedEffect(state.toastShowId) {
-        Toast.makeText(context, state.toastMessage, Toast.LENGTH_SHORT).show()
+        val msg = state.toastMessage
+        if (msg.isNotEmpty()) {
+            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+        }
     }
 }

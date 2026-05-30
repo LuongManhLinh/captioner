@@ -10,27 +10,21 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import io.captioner.data.dto.CaptionKaraokeDto
 import io.captioner.data.model.Caption
 import io.captioner.data.model.KaraokeWord
 import io.captioner.ui.editor.Selection
-import kotlinx.coroutines.delay
 
 private const val LOG_TAG = "Editor"
 @Composable
 fun Editor(
     modifier: Modifier = Modifier,
-    videoUri: Uri,
+    exoPlayer: ExoPlayer,
     isPlaying: Boolean,
     setPlaying: (Boolean) -> Unit,
     captions: List<CaptionKaraokeDto>,
@@ -39,7 +33,6 @@ fun Editor(
     selection: Selection,
     durationMs: Long,
     currentTimeMs: Long,
-    setDuration: (Long) -> Unit,
     updateProgress: (Long) -> Unit,
     updateCaptionPosition: (String, Float, Float) -> Unit,
     onViewCaptionDoubleTap: (String, Boolean) -> Unit,
@@ -72,60 +65,6 @@ fun Editor(
     onTimelineHeightChange: (Dp) -> Unit = {},
     onHeightControllerDoubleTap: () -> Unit = {}
 ) {
-    val context = LocalContext.current
-    val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
-            repeatMode = Player.REPEAT_MODE_OFF
-            playWhenReady = false
-        }
-    }
-
-    LaunchedEffect(videoUri) {
-        videoUri.let { uri ->
-            val mediaItem = MediaItem.fromUri(uri)
-            exoPlayer.setMediaItem(mediaItem)
-            exoPlayer.prepare()
-        }
-    }
-
-    LaunchedEffect(isPlaying) {
-        if (isPlaying) exoPlayer.play() else exoPlayer.pause()
-    }
-
-    // 1. Listen for player state changes to get the correct duration
-    DisposableEffect(exoPlayer) {
-        val listener = object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_READY) {
-                    val duration = exoPlayer.duration
-                    if (duration != androidx.media3.common.C.TIME_UNSET && duration > 0) {
-                        setDuration(duration)
-                    }
-                }
-            }
-        }
-        exoPlayer.addListener(listener)
-        onDispose {
-            exoPlayer.removeListener(listener)
-        }
-    }
-
-    // 2. Separate LaunchedEffect specifically for the progress loop
-    LaunchedEffect(exoPlayer) {
-        while (true) {
-            if (exoPlayer.isPlaying) {
-                updateProgress(exoPlayer.currentPosition)
-            }
-            delay(50)
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose {
-            exoPlayer.release()
-        }
-    }
-
     val (normalCaptions, karaokeCaptions, karaokeWords) = remember(captions) {
         val normalCaptions = mutableListOf<Caption>()
         val karaokeCaptions = mutableListOf<Caption>()
@@ -160,17 +99,14 @@ fun Editor(
     }
 
     val onSeek: (Long) -> Unit = { timeMs ->
-        exoPlayer.seekTo(timeMs)
         updateProgress(timeMs)
     }
 
     val onPause = {
-        exoPlayer.pause()
         setPlaying(false)
     }
 
     val onResume = {
-        exoPlayer.play()
         setPlaying(true)
     }
 

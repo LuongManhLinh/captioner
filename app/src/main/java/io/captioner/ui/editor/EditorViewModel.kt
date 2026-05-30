@@ -3,7 +3,6 @@ package io.captioner.ui.editor
 import android.content.Context
 import android.net.Uri
 import android.util.Log
-import androidx.compose.runtime.remember
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
@@ -131,6 +130,10 @@ class EditorViewModel(
     private val videoThumbnailDao: VideoThumbnailDao
 ) : ViewModel() {
     private val _state = MutableStateFlow(EditorState())
+    val state: StateFlow<EditorState> = _state.asStateFlow()
+    var exoPlayer: ExoPlayer? = null
+
+    var exoSyncJob: Job? = null
 
     init {
         viewModelScope.launch(Dispatchers.IO) {
@@ -175,7 +178,53 @@ class EditorViewModel(
         }
     }
 
-    val state: StateFlow<EditorState> = _state.asStateFlow()
+    fun initializeExoPlayer(context: Context) {
+        Log.d(LOG_TAG, "Initializing exoplayer")
+        exoPlayer = ExoPlayer.Builder(context).build().apply {
+            repeatMode = Player.REPEAT_MODE_OFF
+            playWhenReady = false
+        }
+
+        val listener = object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY) {
+                    val duration = exoPlayer?.duration ?: return
+                    if (duration != androidx.media3.common.C.TIME_UNSET && duration > 0) {
+                        setDuration(duration)
+                    }
+                }
+            }
+        }
+        exoPlayer?.addListener(listener)
+        startExoSync()
+    }
+
+    fun initializeVideoForExoPlayer() {
+        Log.d(LOG_TAG, "Initializing video for exo player")
+        val project = _state.value.project ?: return
+        val mediaItem = MediaItem.fromUri(project.videoUri)
+        exoPlayer?.setMediaItem(mediaItem)
+        exoPlayer?.prepare()
+    }
+
+    fun startExoSync() {
+        Log.d(LOG_TAG, "Starting syncing time")
+        exoSyncJob?.cancel()
+        exoSyncJob = viewModelScope.launch(Dispatchers.Main) {
+            while (true) {
+                exoPlayer?.let {
+                    if (it.isPlaying) {
+                        _state.update { state ->
+                            state.copy(
+                                currentTimeMs = it.currentPosition
+                            )
+                        }
+                    }
+                }
+                delay(50)
+            }
+        }
+    }
 
     fun getOrInitializeThumbnails(context: Context) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -268,12 +317,16 @@ class EditorViewModel(
     }
 
     fun setPlaying(isPlaying: Boolean) {
+        exoPlayer?.let {
+            if (isPlaying) it.play() else it.pause()
+        }
         _state.update {
             it.copy(isPlaying = isPlaying)
         }
     }
 
     fun updateProgress(currentTimeMs: Long) {
+        exoPlayer?.seekTo(currentTimeMs)
         _state.update {
             it.copy(
                 currentTimeMs = currentTimeMs.coerceIn(0L, it.durationMs)
@@ -1191,6 +1244,12 @@ class EditorViewModel(
                 showSubFormatDialog = open
             )
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        exoPlayer?.release()
+        exoSyncJob?.cancel()
     }
 
     companion object {

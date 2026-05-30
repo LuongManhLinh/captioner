@@ -80,37 +80,51 @@ fun TimelineSection(
 ) {
     val density = LocalDensity.current
 
-    val videoTrackWidth = with(density) { (durationMs * pxPerMs).toDp() }
-    val thumbWidthDp = with(density) { (thumbnailDurationMs * pxPerMs).toDp() }
-    val lastThumbWidthDp = with(density) {
-        val left = durationMs % thumbnailDurationMs
-        if (left == 0L) thumbWidthDp else (left * pxPerMs).toDp()
+    val videoTrackWidth = remember(durationMs) {
+        with(density) { (durationMs * pxPerMs).toDp() }
+    }
+
+    val (thumbWidthDp, lastThumbWidthDp) = remember(thumbnailDurationMs) {
+        with(density) {
+            val thumbWidthDp = (thumbnailDurationMs * pxPerMs).toDp()
+            val left = durationMs % thumbnailDurationMs
+            Pair(
+                thumbWidthDp,
+                if (left == 0L) thumbWidthDp else (left * pxPerMs).toDp()
+            )
+        }
     }
 
     val scrollState = rememberScrollState()
     val captionVerticalScrollState = rememberScrollState()
 
     var wasPlayingBeforeScrub by remember { mutableStateOf(false) }
+    var isProgrammaticScroll by remember { mutableStateOf(false) }
+    var isUserScrolling by remember { mutableStateOf(false) }
 
     LaunchedEffect(scrollState.isScrollInProgress) {
-        if (scrollState.isScrollInProgress) {
+        if (scrollState.isScrollInProgress && !isProgrammaticScroll) {
+            isUserScrolling = true
             wasPlayingBeforeScrub = isPlaying
             if (isPlaying) onPause()
-        } else {
+        } else if (!scrollState.isScrollInProgress && isUserScrolling) {
+            isUserScrolling = false
             if (wasPlayingBeforeScrub) onResume()
         }
     }
 
     LaunchedEffect(currentTimeMs, pxPerMs) {
-        if (!scrollState.isScrollInProgress) {
+        if (!isUserScrolling) {
             val targetScroll = (currentTimeMs * pxPerMs).roundToInt()
-            scrollState.scrollTo(targetScroll)
+            isProgrammaticScroll = true
+            scrollState.animateScrollTo(targetScroll)
+            isProgrammaticScroll = false
         }
     }
 
     LaunchedEffect(scrollState, pxPerMs) {
         snapshotFlow { scrollState.value }.collect { scrollValue ->
-            if (scrollState.isScrollInProgress) {
+            if (isUserScrolling) {
                 val newTime = scrollValue / pxPerMs
                 onSeek(newTime.toLong())
             }
