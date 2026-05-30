@@ -49,33 +49,31 @@ import java.io.File
 
 fun openFileInExplorer(context: Context, fileUri: Uri) {
     try {
-        // 1. Lấy path thật từ URI dạng file://
-        val filePath = fileUri.path ?: return
-        val file = File(filePath)
+        Log.d("ExportSubtitle", "File URI = $fileUri")
 
-        if (!file.exists()) {
-            Log.e("ExportSubtitle", "File không tồn tại: $filePath")
-            return
+        val contentUri = if (fileUri.scheme == "content") {
+            // API 29+: already a content:// URI from MediaStore, use directly
+            fileUri
+        } else {
+            // Legacy file:// URI: convert via FileProvider
+            val filePath = fileUri.path ?: return
+            val file = File(filePath)
+            if (!file.exists()) {
+                Log.e("ExportSubtitle", "File không tồn tại: $filePath")
+                return
+            }
+            FileProvider.getUriForFile(context, "${context.packageName}.provider", file)
         }
 
-        // 2. Chuyển sang content:// URI
-        val contentUri = FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.provider",
-            file
-        )
+        Log.d("ExportSubtitle", "Content URI = $contentUri")
 
-        Log.d("ExportSubtitle", "New Content URI = $contentUri")
-
-        // 3. Set vào Intent
         val intent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(contentUri, "text/plain") // Mime type chuẩn cho file SRT
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) // QUAN TRỌNG: Cấp quyền đọc cho app được chọn
+            setDataAndType(contentUri, "text/plain")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
 
-        val chooser = Intent.createChooser(intent, "Mở file SRT với")
-        context.startActivity(chooser)
+        context.startActivity(Intent.createChooser(intent, "Mở file SRT với"))
 
     } catch (e: Exception) {
         Log.e("ExportSubtitle", "Lỗi khi mở file", e)

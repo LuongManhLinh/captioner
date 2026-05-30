@@ -76,7 +76,7 @@ suspend fun exportSubtitleFile(
             val contentValues = ContentValues().apply {
                 put(MediaStore.Downloads.DISPLAY_NAME, outputFileName)
                 put(MediaStore.Downloads.MIME_TYPE, mimeType)
-                put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/CaptionerApp")
+                put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/Captioner")
                 put(MediaStore.Downloads.IS_PENDING, 1)
             }
             val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues)
@@ -92,7 +92,7 @@ suspend fun exportSubtitleFile(
         } else {
             // API < 29 ghi thẳng ra file
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
-            val appDir = File(downloadsDir, "CaptionerApp")
+            val appDir = File(downloadsDir, "Captioner")
             if (!appDir.exists()) appDir.mkdirs()
             val file = File(appDir, outputFileName)
             file.writeText(content)
